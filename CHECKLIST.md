@@ -134,14 +134,14 @@ meter           + indicator     (stretch)        (on recordings)
 
 > **Context**: A `UserPromptSubmit` (or `Stop`) hook receives a JSON payload including the transcript path and can inject context back into the session via stdout. Run the classifier; when the session is on a costlier tier than recommended for K consecutive turns AND confidence is high, inject a concise nudge with the estimated saving. Debounce so it fires at most once per phase transition — a naggy hook gets disabled.
 
-- [ ] Create `src/hook/nudge.ts`: read hook stdin, get transcript path, run `classifyPhase`, compare current model vs `recommendedTier`
-- [ ] Add debounce state (e.g. a small JSON marker file keyed by session id) so the nudge fires once per mismatch streak, not every turn
-- [ ] Compose the nudge text: `"N mechanical edits on Opus — switch to /model sonnet, est. save €X.XX this phase."`
-- [ ] Emit the nudge as hook additionalContext (verify the exact output contract Claude Code expects; no-op output when no nudge is due)
-- [ ] Add `bin/nudge.sh` wrapper and register it under `hooks.UserPromptSubmit` in `.claude/settings.json`
-- [ ] Create `src/hook/nudge.test.ts`: mismatch streak → nudge emitted; matched tier → silent; debounce suppresses repeats
-- [ ] Run `npm test` — hook tests pass
-- [ ] **Demo**: live session doing mechanical edits on Opus gets nudged; hit `/model sonnet`; statusline meter reacts
+- [X] Create `src/hook/nudge.ts`: read hook stdin, get transcript path, run `classifyPhase`, compare current model vs `recommendedTier` — `decideNudge` (pure); current model derived from the last transcript turn (hook payload has no `model` field, confirmed against docs); **downshift-only** (never nudges toward a costlier tier)
+- [X] Add debounce state (e.g. a small JSON marker file keyed by session id) so the nudge fires once per mismatch streak, not every turn — `applyDebounce` (pure) + a marker file under `os.tmpdir()/agentx-autopilot/nudge-<session>.json`; keyed by (phase, from→to), resets when the mismatch clears
+- [X] Compose the nudge text: `"N mechanical edits on Opus — switch to /model sonnet, est. save €X.XX this phase."` — e.g. `💸 5 implementation turns on Opus — switch to /model haiku, est. save €0.18 this phase.`
+- [X] Emit the nudge as hook additionalContext (verify the exact output contract Claude Code expects; no-op output when no nudge is due) — **contract verified via docs**: UserPromptSubmit `additionalContext` is *model-visible only*; switched to the **`Stop` hook with `systemMessage`** (user-visible, non-blocking) so the human actually sees the nudge. No-op (exit 0, empty) when not due.
+- [X] Add `bin/nudge.sh` wrapper and register it under `hooks.UserPromptSubmit` in `.claude/settings.json` — wrapper added; registered under **`hooks.Stop`** (not UserPromptSubmit) per the visibility fix above, via `$CLAUDE_PROJECT_DIR` (no personal path)
+- [X] Create `src/hook/nudge.test.ts`: mismatch streak → nudge emitted; matched tier → silent; debounce suppresses repeats — 9 tests (fire, already-on-tier, below-streak, downshift-only, low-confidence, + 4 debounce)
+- [X] Run `npm test` — hook tests pass (35/35 total green)
+- [X] **Demo**: live session doing mechanical edits on Opus gets nudged; hit `/model sonnet`; statusline meter reacts — verified end-to-end against `fixtures/nudge-demo.jsonl`: emits `{"systemMessage":"💸 5 implementation turns on Opus — switch to /model haiku, …€0.18…"}`, and the immediate repeat is debounced silent. Live firing needs a session reload.
 
 > 💾 **Checkpoint**: `feat(hook): add cost-aware model-switch nudge`
 
