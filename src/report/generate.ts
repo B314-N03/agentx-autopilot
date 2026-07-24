@@ -174,7 +174,18 @@ function findRecentTranscripts(projectsRoot: string, cutoffMs: number, dirPrefix
   return out;
 }
 
+/** Load repo-root .env into process.env if present (Node built-in, no dep). */
+function loadDotenv(): void {
+  const loader = (process as { loadEnvFile?: (p?: string) => void }).loadEnvFile;
+  try {
+    loader?.(join(root, '.env'));
+  } catch {
+    /* no .env — fine */
+  }
+}
+
 async function main(): Promise<void> {
+  loadDotenv();
   const arg = process.argv[2];
   let report: SavingsReport;
   let subtitle: string;
