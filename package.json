@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx src/core/cli.ts",
     "cost": "tsx src/core/cli.ts",
+    "report": "tsx src/report/generate.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"

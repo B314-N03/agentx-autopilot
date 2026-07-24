@@ -120,19 +120,29 @@ export function classifyPhase(input: ClassifyInput, table: PricingTable = getPri
 }
 
 /**
- * Attribute each billable turn to a phase, using a rolling window of signals
- * ending at that turn. Returns one Phase per turn, index-aligned with `turns`.
+ * Attribute a full verdict to each billable turn, using a rolling window of
+ * signals ending at that turn. Index-aligned with `turns`.
  */
+export function attributeVerdicts(
+  signals: TurnSignals[],
+  turns: TurnCost[],
+  table: PricingTable = getPricing(),
+  windowN = 14,
+): PhaseVerdict[] {
+  const idxById = new Map(signals.map((sig, i) => [sig.turnId, i] as const));
+  return turns.map((t) => {
+    const end = idxById.get(t.turnId) ?? signals.length - 1;
+    const window = signals.slice(Math.max(0, end - windowN + 1), end + 1);
+    return classifyPhase({ signals: window, lastTurn: t }, table);
+  });
+}
+
+/** Phase per turn (index-aligned with `turns`). */
 export function attributePhases(
   signals: TurnSignals[],
   turns: TurnCost[],
   table: PricingTable = getPricing(),
   windowN = 14,
 ): Phase[] {
-  const idxById = new Map(signals.map((sig, i) => [sig.turnId, i] as const));
-  return turns.map((t) => {
-    const end = idxById.get(t.turnId) ?? signals.length - 1;
-    const window = signals.slice(Math.max(0, end - windowN + 1), end + 1);
-    return classifyPhase({ signals: window, lastTurn: t }, table).phase;
-  });
+  return attributeVerdicts(signals, turns, table, windowN).map((v) => v.phase);
 }

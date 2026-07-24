@@ -175,18 +175,18 @@ meter           + indicator     (stretch)        (on recordings)
 
 ### 5.1 Analytics core
 
-- [ ] Create `src/report/analyze.ts`: given `TurnCost[]`, compute (a) actual cost, (b) all-Opus baseline cost, (c) ideal cost if every turn ran at its recommended tier
-- [ ] Add monthly projection helper (scale a session/day sample to a month) with a clearly labeled assumption
-- [ ] Create `src/report/analyze.test.ts`: assert baseline ≥ actual ≥ ideal on a mixed fixture
-- [ ] Run `npm test` — analytics tests pass
+- [X] Create `src/report/analyze.ts`: given `TurnCost[]`, compute (a) actual cost, (b) all-Opus baseline cost, (c) ideal cost if every turn ran at its recommended tier — `analyze()` also returns per-model breakdown + Opus-share (actual vs ideal)
+- [X] Add monthly projection helper (scale a session/day sample to a month) with a clearly labeled assumption — `projectMonthly()` returns the figure **and** the assumption string (never presented as measured)
+- [X] Create `src/report/analyze.test.ts`: assert baseline ≥ actual ≥ ideal on a mixed fixture (5 tests)
+- [X] Run `npm test` — analytics tests pass (49/49 total green)
 
 ### 5.2 Dashboard
 
-- [ ] Scaffold a Vite + React app under `dashboard/` (or a `report.html` generator if downgrading)
-- [ ] Load one or more transcript fixtures and render the before/after bar chart (actual vs all-Opus vs ideal)
-- [ ] Add the headline stat: `You'd have spent €X on all-Opus. Autopilot: €Y. Saved Z%.`
-- [ ] Add the "Opus was the top slice → now N%" split as a second visual
-- [ ] **Demo**: open the dashboard, present the savings chart + monthly org projection
+- [X] Scaffold a Vite + React app under `dashboard/` (or a `report.html` generator if downgrading) — **downgraded to the static `report.html` generator** (`src/report/generate.ts`, `npm run report`): zero-install, offline, no dev server — more reliable to demo. Upgradeable to Vite+React later (analyzer is already UI-agnostic).
+- [X] Load one or more transcript fixtures and render the before/after bar chart (actual vs all-Opus vs ideal) — inline SVG 3-bar chart (All-Opus €50.13 · Actual €76.81 · Autopilot €35.37), no external chart lib
+- [X] Add the headline stat: `You'd have spent €X on all-Opus. Autopilot: €Y. Saved Z%.` — rendered (baseline €50.13 → ideal €35.37, saved 29%); plus a "saved vs actual" card (54%) and monthly projection with its assumption
+- [X] Add the "Opus was the top slice → now N%" split as a second visual — adapted: shipped a **per-model spend breakdown table** (🔴 Fable 69% · 🟠 Opus 31%) + an **overspend callout** (actual €76.81 > all-Opus €50.13 because 69% went to Fable). The literal "Opus share" stat was dropped: it *inverts* on a Fable-heavy session (autopilot shifts Fable→Opus, so Opus share rises), so the breakdown table tells the true "where the money went" story instead.
+- [X] **Demo**: open the dashboard, present the savings chart + monthly org projection — `npm run report` writes `report.html`; verified: **actual €76.81 → autopilot €35.37 (54% saved vs actual, 29% vs all-Opus baseline)**. `report.html` is gitignored (embeds real spend; regenerate per session).
 
 > 💾 **Checkpoint**: `feat(report): add savings analytics and dashboard`
 
