@@ -1,22 +1,27 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { parseTranscript, aggregateByModel } from '../core/costEngine.js';
-import type { TurnCost } from '../core/types.js';
+import {
+  readEntries,
+  turnsFromEntries,
+  aggregateByModel,
+  aggregateByPhase,
+} from '../core/costEngine.js';
+import { getPricing, type PricingTable } from '../core/pricing.js';
+import { shortModelName, tierBadge } from '../core/modelLabel.js';
+import { extractSignals } from '../classifier/signals.js';
+import { classifyPhase, attributePhases, phaseLabel } from '../classifier/classify.js';
+import type { Phase, TurnCost } from '../core/types.js';
 
 /** Opus cost-share above which the meter shows a ⚠ overspend marker. */
 const OPUS_SHARE_WARN = 0.6;
+/** How many recent turns of signal feed the live phase verdict. */
+const VERDICT_WINDOW = 20;
+
+// Re-exported so existing imports keep working after the label helper moved to core.
+export { shortModelName };
 
 function eur(n: number): string {
   return '€' + n.toFixed(2);
-}
-
-/**
- * Shorten a model id to its family label for the meter:
- * `claude-opus-4-8` → "Opus". Derived from the id, so new models need no map.
- */
-export function shortModelName(model: string): string {
-  const family = model.split('-')[1] ?? model;
-  return family.charAt(0).toUpperCase() + family.slice(1);
 }
 
 /**
@@ -41,6 +46,46 @@ export function renderMeter(turns: TurnCost[]): string {
   return `${body}Σ ${eur(total)}${warn}`;
 }
 
+const PHASE_ABBREV: Record<Phase, string> = {
+  plan: 'plan',
+  implement: 'impl',
+  verify: 'verify',
+  debug: 'debug',
+};
+
+/** `plan €0.55 · impl €0.30 · verify €0.08` — omits phases with no turns. */
+export function renderPhaseSplit(byPhase: Record<Phase, { costEur: number; turns: number }>): string {
+  const order: Phase[] = ['plan', 'implement', 'verify', 'debug'];
+  return order
+    .filter((p) => byPhase[p].turns > 0)
+    .map((p) => `${PHASE_ABBREV[p]} ${eur(byPhase[p].costEur)}`)
+    .join(' · ');
+}
+
+/**
+ * Compose the full statusline: money meter | per-phase split | live verdict.
+ * Pure over parsed turns + signals so it can be asserted without IO.
+ */
+export function composeStatusline(
+  turns: TurnCost[],
+  signals: ReturnType<typeof extractSignals>,
+  table: PricingTable = getPricing(),
+): string {
+  const meter = renderMeter(turns);
+  if (!turns.length) return meter;
+
+  const phases = attributePhases(signals, turns, table);
+  const split = renderPhaseSplit(aggregateByPhase(turns, (_t, i) => phases[i]!));
+
+  const verdict = classifyPhase(
+    { signals: signals.slice(-VERDICT_WINDOW), lastTurn: turns[turns.length - 1] },
+    table,
+  );
+  const verdictStr = `${phaseLabel(verdict.phase)} → ${tierBadge(verdict.recommendedModel, table)} recommended`;
+
+  return [meter, split, verdictStr].filter(Boolean).join(' | ');
+}
+
 /** Locate the transcript path across known/likely payload field names. */
 function transcriptPathFrom(payload: unknown): string | undefined {
   if (!payload || typeof payload !== 'object') return undefined;
@@ -50,14 +95,16 @@ function transcriptPathFrom(payload: unknown): string | undefined {
 }
 
 /**
- * Build the meter string from a (parsed) statusLine stdin payload. Cold-start
- * safe: a missing/short/absent transcript renders `Σ €0.00` rather than crash.
+ * Build the statusline string from a (parsed) statusLine stdin payload.
+ * Cold-start safe: a missing/short/absent transcript renders `Σ €0.00`.
  */
 export async function buildStatusline(payload: unknown): Promise<string> {
   const path = transcriptPathFrom(payload);
   if (!path || !existsSync(path)) return renderMeter([]);
-  const turns = await parseTranscript(path);
-  return renderMeter(turns);
+  const entries = await readEntries(path);
+  const turns = turnsFromEntries(entries);
+  if (!turns.length) return renderMeter([]);
+  return composeStatusline(turns, extractSignals(entries));
 }
 
 async function main(): Promise<void> {

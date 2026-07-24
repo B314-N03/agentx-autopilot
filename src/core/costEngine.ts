@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { getPricing, type PricingTable } from './pricing.js';
-import type { TurnCost } from './types.js';
+import type { TurnCost, Phase } from './types.js';
 
 /** Raw transcript usage block (only the fields we cost on). */
 interface RawUsage {
@@ -38,17 +38,29 @@ export function costTurn(usage: RawUsage, model: string, table: PricingTable): n
  * pricing is applied per-turn using the turn's own date.
  */
 export async function parseTranscript(path: string): Promise<TurnCost[]> {
+  return turnsFromEntries(await readEntries(path));
+}
+
+/** Read a JSONL transcript into raw parsed entries, skipping malformed lines. */
+export async function readEntries(path: string): Promise<any[]> {
   const rl = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
-  const turns: TurnCost[] = [];
+  const entries: any[] = [];
   for await (const line of rl) {
     if (!line.trim()) continue;
-    let entry: any;
     try {
-      entry = JSON.parse(line);
+      entries.push(JSON.parse(line));
     } catch {
-      continue; // skip malformed lines rather than abort the whole session
+      /* skip malformed line rather than abort the whole session */
     }
-    const msg = entry.message;
+  }
+  return entries;
+}
+
+/** Cost the billable (assistant + usage) entries into per-turn costs. */
+export function turnsFromEntries(entries: any[]): TurnCost[] {
+  const turns: TurnCost[] = [];
+  for (const entry of entries) {
+    const msg = entry?.message;
     if (!msg || typeof msg !== 'object' || !msg.usage || !msg.model) continue;
 
     const ts: string = entry.timestamp ?? '';
@@ -79,5 +91,29 @@ export function aggregateByModel(
     bucket.costEur += t.costEur;
     bucket.turns += 1;
   }
+  return out;
+}
+
+/**
+ * Aggregate per-turn costs by detected phase. Phase attribution is supplied by
+ * the caller (the classifier) via `phaseOf`, so core stays independent of the
+ * classifier. All four phase buckets are always present (0 when unused), so
+ * their costs sum to the session total.
+ */
+export function aggregateByPhase(
+  turns: TurnCost[],
+  phaseOf: (turn: TurnCost, index: number) => Phase,
+): Record<Phase, { costEur: number; turns: number }> {
+  const out: Record<Phase, { costEur: number; turns: number }> = {
+    plan: { costEur: 0, turns: 0 },
+    implement: { costEur: 0, turns: 0 },
+    verify: { costEur: 0, turns: 0 },
+    debug: { costEur: 0, turns: 0 },
+  };
+  turns.forEach((t, i) => {
+    const bucket = out[phaseOf(t, i)];
+    bucket.costEur += t.costEur;
+    bucket.turns += 1;
+  });
   return out;
 }

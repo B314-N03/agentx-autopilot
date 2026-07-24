@@ -41,7 +41,7 @@ meter           + indicator     (stretch)        (on recordings)
 
 **Stack decision**: Node + TypeScript (`tsx` for run, `vitest` for tests). Core lib is framework-free. Phase 5 report is a small Vite + React app (frontend-shaped, judge-facing) — downgradeable to a CLI + static chart if time is short.
 
-**Capability caveat**: plain Claude Code hooks can _recommend_ but cannot run `/model` themselves. Phases 1–3 + 5 are fully achievable with hooks. Genuine hands-off switching (Phase 4) needs the Agent SDK — treat as stretch.
+**Capability caveat**: a _pure_ hook (JSON-on-stdout only) can _recommend_ but cannot run `/model`. Phases 1–3 + 5 are fully achievable with hooks. Auto-switching (Phase 4) does **not** need an API key: a hook can inject `/model` into the live TUI via `tmux send-keys`/`osascript` (Path 2), or a headless `claude -p --model` loop can switch per turn on subscription auth (Path 1). Both are subscription-authed; still stretch (fragile / autonomous-only respectively).
 
 ---
 
@@ -51,20 +51,20 @@ meter           + indicator     (stretch)        (on recordings)
 
 ### 0.1 Repo scaffold
 
-- [X] Run `git init` in `~/agentx-autopilot`
-- [X] Create `package.json` (name `agentx-autopilot`, `type: module`, scripts: `dev`, `test`, `lint`, `cost`)
-- [X] Add dev deps: `typescript`, `tsx`, `vitest`, `@types/node`
-- [X] Create `tsconfig.json` (NodeNext module resolution, strict, `src/` root)
-- [X] Create folder structure: `src/core/`, `src/statusline/`, `src/classifier/`, `src/hook/`, `src/autopilot/`, `src/report/`, `fixtures/`
-- [X] Create `.gitignore` (`node_modules`, `dist`, `.env`)
-- [X] Create `README.md` with the one-liner, the parallelization map, and per-track ownership
+- [x] Run `git init` in `~/agentx-autopilot`
+- [x] Create `package.json` (name `agentx-autopilot`, `type: module`, scripts: `dev`, `test`, `lint`, `cost`)
+- [x] Add dev deps: `typescript`, `tsx`, `vitest`, `@types/node`
+- [x] Create `tsconfig.json` (NodeNext module resolution, strict, `src/` root)
+- [x] Create folder structure: `src/core/`, `src/statusline/`, `src/classifier/`, `src/hook/`, `src/autopilot/`, `src/report/`, `fixtures/`
+- [x] Create `.gitignore` (`node_modules`, `dist`, `.env`)
+- [x] Create `README.md` with the one-liner, the parallelization map, and per-track ownership
 
 ### 0.2 Data contracts
 
-- [X] Create `src/core/types.ts` defining `TurnCost` (`turnId`, `model`, `tokensIn`, `tokensOut`, `cacheRead`, `cacheWrite`, `costEur`, `ts`)
-- [X] Add `PhaseVerdict` type to `src/core/types.ts` (`phase: 'plan'|'implement'|'verify'|'debug'`, `recommendedModel: string` (a model id, not a fixed enum), `confidence: number`, `signals: string[]`, `estSaveEur: number`)
-- [X] Create `src/core/pricing.json` keyed by model id with `{ in, out, cacheRead, cacheWrite }` per-Mtok rates — seed with the current roster (do not hardcode a 3-tier enum anywhere): `claude-haiku-4-5` `{1, 5}`, `claude-sonnet-5` `{3, 15}` (intro `{2, 10}` through 2026-08-31), `claude-opus-4-8` `{5, 25}`, `claude-fable-5` `{10, 50}`; cache rates ≈ `in × 0.1` (read) and `in × 1.25` (write)
-- [X] Add a `tierLadder(pricing) -> string[]` helper to `src/core/pricing.ts` that returns model ids sorted cheapest→priciest by input rate — the tier ordering is **derived**, so Fable (top) and any future model slot in without code changes
+- [x] Create `src/core/types.ts` defining `TurnCost` (`turnId`, `model`, `tokensIn`, `tokensOut`, `cacheRead`, `cacheWrite`, `costEur`, `ts`)
+- [x] Add `PhaseVerdict` type to `src/core/types.ts` (`phase: 'plan'|'implement'|'verify'|'debug'`, `recommendedModel: string` (a model id, not a fixed enum), `confidence: number`, `signals: string[]`, `estSaveEur: number`)
+- [x] Create `src/core/pricing.json` keyed by model id with `{ in, out, cacheRead, cacheWrite }` per-Mtok rates — seed with the current roster (do not hardcode a 3-tier enum anywhere): `claude-haiku-4-5` `{1, 5}`, `claude-sonnet-5` `{3, 15}` (intro `{2, 10}` through 2026-08-31), `claude-opus-4-8` `{5, 25}`, `claude-fable-5` `{10, 50}`; cache rates ≈ `in × 0.1` (read) and `in × 1.25` (write)
+- [x] Add a `tierLadder(pricing) -> string[]` helper to `src/core/pricing.ts` that returns model ids sorted cheapest→priciest by input rate — the tier ordering is **derived**, so Fable (top) and any future model slot in without code changes
 
 > **Note**: Sonnet intro pricing (`{2,10}` through 2026-08-31) is modelled as a date-aware override in `pricing.ts` (`getPricing(onDate)`), not baked into the static JSON — so cost math is correct both during and after the promo. Today (2026-07-24) is inside the window.
 
@@ -72,18 +72,18 @@ meter           + indicator     (stretch)        (on recordings)
 
 ### 0.3 Fixtures
 
-- [X] Copy 1 real transcript JSONL from `~/.claude/projects/*/` into `fixtures/session-sample.jsonl` (scrub any sensitive content) — done via `scripts/scrub-transcript.mjs` (+ `scripts/make-fixture.sh` wrapper); a personal session (1038 lines, Fable + Opus). Scrub verified: 0 non-redacted text blocks, 0 secret-pattern hits; tool names kept (Edit 114 / Bash 113 / Read 21).
-- [X] Add a `fixtures/README.md` noting the transcript schema fields actually present (`message.usage`, `model`, timestamps) — verify field names by reading the sample, do not assume
+- [x] Copy 1 real transcript JSONL from `~/.claude/projects/*/` into `fixtures/session-sample.jsonl` (scrub any sensitive content) — done via `scripts/scrub-transcript.mjs` (+ `scripts/make-fixture.sh` wrapper); a personal session (1038 lines, Fable + Opus). Scrub verified: 0 non-redacted text blocks, 0 secret-pattern hits; tool names kept (Edit 114 / Bash 113 / Read 21).
+- [x] Add a `fixtures/README.md` noting the transcript schema fields actually present (`message.usage`, `model`, timestamps) — verify field names by reading the sample, do not assume
 
 ### 0.4 Core cost engine + CLI demo
 
-- [X] Create `src/core/costEngine.ts`: `parseTranscript(path) -> TurnCost[]` (read JSONL line-by-line, extract per-message model + usage incl. cache tokens, apply `pricing.json`)
-- [X] Add `aggregateByModel(turns) -> Record<model, {costEur, turns}>` to `costEngine.ts`
-- [X] Create `src/core/cli.ts`: reads a transcript path arg, prints a per-model cost table + total
-- [X] Wire `npm run cost` → `tsx src/core/cli.ts`
-- [X] Create `src/core/costEngine.test.ts`: assert token→cost math against a hand-computed fixture row (6 tests: Opus math, Sonnet intro/standard boundary, unknown-model guard, tierLadder order, parse+aggregate)
-- [X] Run `npm test` — cost engine tests pass (6/6 green)
-- [X] **Demo**: `npm run cost fixtures/session-sample.jsonl` prints your real per-model spend + total — **€76.81 total, Fable €53.36 (69%) + Opus €23.45 (31%)** across 421 billable turns. Real "wow": one session, 69% on the priciest tier.
+- [x] Create `src/core/costEngine.ts`: `parseTranscript(path) -> TurnCost[]` (read JSONL line-by-line, extract per-message model + usage incl. cache tokens, apply `pricing.json`)
+- [x] Add `aggregateByModel(turns) -> Record<model, {costEur, turns}>` to `costEngine.ts`
+- [x] Create `src/core/cli.ts`: reads a transcript path arg, prints a per-model cost table + total
+- [x] Wire `npm run cost` → `tsx src/core/cli.ts`
+- [x] Create `src/core/costEngine.test.ts`: assert token→cost math against a hand-computed fixture row (6 tests: Opus math, Sonnet intro/standard boundary, unknown-model guard, tierLadder order, parse+aggregate)
+- [x] Run `npm test` — cost engine tests pass (6/6 green)
+- [x] **Demo**: `npm run cost fixtures/session-sample.jsonl` prints your real per-model spend + total — **€76.81 total, Fable €53.36 (69%) + Opus €23.45 (31%)** across 421 billable turns. Real "wow": one session, 69% on the priciest tier.
 
 > 💾 **Checkpoint**: `feat(core): add contracts, pricing, fixtures and cost engine CLI`
 
@@ -93,16 +93,16 @@ meter           + indicator     (stretch)        (on recordings)
 
 > **Context**: Claude Code runs a `statusLine` command each turn and passes a JSON payload on stdin that includes the running session's transcript path. Read that path, run `costEngine`, and render a compact live meter. Verify the exact stdin field name for the transcript path against the payload (log it once) before hardcoding it.
 
-- [X] Create `src/statusline/statusline.ts`: read stdin JSON, extract transcript path, call `parseTranscript` + `aggregateByModel`
-- [X] Render a one-line meter string: `Opus €0.84 · Sonnet €0.09 · total €0.93`
-- [X] Render an explicit, clearly-labeled **session total** segment (running sum across all turns, formatted `Σ €0.93`) as the meter's anchor
-- [X] Add a `⚠` marker to the meter when Opus share exceeds a threshold (e.g. >60%)
-- [X] Handle the cold-start case (empty/short transcript → `Σ €0.00`) without crashing
-- [X] Add `bin/statusline.sh` wrapper that invokes `tsx src/statusline/statusline.ts`
-- [X] Register the wrapper in `.claude/settings.json` under `statusLine` (in the hackathon repo, not a work repo) — uses `$CLAUDE_PROJECT_DIR/bin/statusline.sh` so no absolute personal path is committed
-- [X] Create `src/statusline/statusline.test.ts`: feed a mock stdin payload → assert meter string format (7 tests: label derivation, ordering, ⚠ on/off, cold-start, payload→meter)
-- [X] Run `npm test` — statusline tests pass (13/13 total green)
-- [X] **Demo**: open a real Claude Code session in this repo, watch the meter tick and the per-model split grow live — verified end-to-end by piping a real statusLine-shaped payload through `statusline.ts` → `Fable €53.36 · Opus €23.45 · Σ €76.81`. Transcript-path field confirmed as `transcript_path`. To watch live, reload this session (settings.json just added); `STATUSLINE_DEBUG=1` logs payload keys to stderr if the field name differs.
+- [x] Create `src/statusline/statusline.ts`: read stdin JSON, extract transcript path, call `parseTranscript` + `aggregateByModel`
+- [x] Render a one-line meter string: `Opus €0.84 · Sonnet €0.09 · total €0.93`
+- [x] Render an explicit, clearly-labeled **session total** segment (running sum across all turns, formatted `Σ €0.93`) as the meter's anchor
+- [x] Add a `⚠` marker to the meter when Opus share exceeds a threshold (e.g. >60%)
+- [x] Handle the cold-start case (empty/short transcript → `Σ €0.00`) without crashing
+- [x] Add `bin/statusline.sh` wrapper that invokes `tsx src/statusline/statusline.ts`
+- [x] Register the wrapper in `.claude/settings.json` under `statusLine` (in the hackathon repo, not a work repo) — uses `$CLAUDE_PROJECT_DIR/bin/statusline.sh` so no absolute personal path is committed
+- [x] Create `src/statusline/statusline.test.ts`: feed a mock stdin payload → assert meter string format (7 tests: label derivation, ordering, ⚠ on/off, cold-start, payload→meter)
+- [x] Run `npm test` — statusline tests pass (13/13 total green)
+- [x] **Demo**: open a real Claude Code session in this repo, watch the meter tick and the per-model split grow live — verified end-to-end by piping a real statusLine-shaped payload through `statusline.ts` → `Fable €53.36 · Opus €23.45 · Σ €76.81`. Transcript-path field confirmed as `transcript_path`. To watch live, reload this session (settings.json just added); `STATUSLINE_DEBUG=1` logs payload keys to stderr if the field name differs.
 
 > 💾 **Checkpoint**: `feat(statusline): add live per-model cost meter`
 
@@ -112,19 +112,19 @@ meter           + indicator     (stretch)        (on recordings)
 
 > **Context**: Pure function over the last N turns of the transcript → `PhaseVerdict`. Signals to weigh: tool-mix (Edit/Write heavy = implement; Read/Grep/Explore + no edits = plan; Bash test runs = verify; repeated failures/errors = debug), slash-command / ADLC phase markers (`refine`/`plan` vs `execute`), thinking-to-edit ratio. Keep it deterministic and testable — no LLM call in the hot path.
 
-- [ ] Create `src/classifier/signals.ts`: extract per-turn signals from `TurnCost[]` + raw transcript entries (tool names used, slash commands, edit count)
-- [ ] Create `src/classifier/classify.ts`: `classifyPhase(recentTurns) -> PhaseVerdict` with weighted heuristics
-- [ ] Map each phase → `recommendedModel` (trivial-mechanical → `claude-haiku-4-5`; implement/verify → `claude-sonnet-5`; plan/hard-debug → `claude-opus-4-8`; reserve `claude-fable-5` only for a high-confidence "hardest reasoning" signal — never a routine recommendation)
-- [ ] Compute `estSaveEur` = current-turn cost minus what it would cost at `recommendedModel` (guard the sign: escalating _up_ the ladder — e.g. to Fable/Opus — yields a negative "saving", so surface it as an added-cost warning, not a saving)
-- [ ] Populate `signals[]` with human-readable reasons (e.g. `"6 consecutive Edit turns"`)
-- [ ] Add `aggregateByPhase(turns) -> Record<phase, {costEur, turns}>` to `src/core/costEngine.ts` (attribute each turn's cost to its detected phase)
-- [ ] Extend `src/statusline/statusline.ts` to append the verdict: `… | Implementing → Sonnet recommended`
-- [ ] Extend the statusline with a **per-phase cost split** segment: `plan €0.55 · impl €0.30 · verify €0.08` (from `aggregateByPhase`)
-- [ ] Add a **tier badge** to the verdict — emoji + ANSI color per model, driven by `tierLadder` position so it stays correct as the roster changes (`🟢 Haiku` / `🟡 Sonnet` / `🟠 Opus` / `🔴 Fable`); verify Claude Code renders ANSI color escapes in the statusline, fall back to emoji-only if not
-- [ ] Create `src/classifier/aggregateByPhase.test.ts`: mixed-phase fixture → assert per-phase totals sum to the session total
-- [ ] Create `src/classifier/classify.test.ts`: fixtures for each phase (plan-heavy, edit-heavy, test-run, error-loop) → assert phase + tier
-- [ ] Run `npm test` — classifier + aggregation tests pass
-- [ ] **Demo**: do planning then editing in a live session — watch the tier badge flip `🔴 Opus` → `🟡 Sonnet`, the per-phase split grow, and the session total (`Σ €…`) tick up
+- [X] Create `src/classifier/signals.ts`: extract per-turn signals from `TurnCost[]` + raw transcript entries (tool names used, slash commands, edit count) — `extractSignals` + `summarize`; also captures Bash test commands + tool_result errors when the transcript carries them (verify/debug signals)
+- [X] Create `src/classifier/classify.ts`: `classifyPhase(recentTurns) -> PhaseVerdict` with weighted heuristics — takes `{signals, lastTurn}`; deterministic score per phase, safe `implement` default on empty windows
+- [X] Map each phase → `recommendedModel` (trivial-mechanical → `claude-haiku-4-5`; implement/verify → `claude-sonnet-5`; plan/hard-debug → `claude-opus-4-8`; reserve `claude-fable-5` only for a high-confidence "hardest reasoning" signal — never a routine recommendation) — `recommendModel` uses `tierLadder` POSITIONS (cheap/mid/high), so it's roster-derived; Fable (top) is never auto-recommended
+- [X] Compute `estSaveEur` = current-turn cost minus what it would cost at `recommendedModel` (guard the sign: escalating _up_ the ladder — e.g. to Fable/Opus — yields a negative "saving", so surface it as an added-cost warning, not a saving) — sign verified both directions in tests
+- [X] Populate `signals[]` with human-readable reasons (e.g. `"6 consecutive Edit turns"`) — `buildReasons` (e.g. `"3 edit ops"`, `"2 test runs"`, `"plan/refine command"`)
+- [X] Add `aggregateByPhase(turns) -> Record<phase, {costEur, turns}>` to `src/core/costEngine.ts` (attribute each turn's cost to its detected phase) — signature is `aggregateByPhase(turns, phaseOf)`: attribution is injected by the classifier via `attributePhases` so **core stays classifier-free** (no core→classifier dependency)
+- [X] Extend `src/statusline/statusline.ts` to append the verdict: `… | Implementing → Sonnet recommended`
+- [X] Extend the statusline with a **per-phase cost split** segment: `plan €0.55 · impl €0.30 · verify €0.08` (from `aggregateByPhase`)
+- [X] Add a **tier badge** to the verdict — emoji + ANSI color per model, driven by `tierLadder` position so it stays correct as the roster changes (`🟢 Haiku` / `🟡 Sonnet` / `🟠 Opus` / `🔴 Fable`); verify Claude Code renders ANSI color escapes in the statusline, fall back to emoji-only if not — shipped **emoji-only** (`tierBadge` in `core/modelLabel.ts`), the documented safe fallback; ANSI can be added once confirmed live
+- [X] Create `src/classifier/aggregateByPhase.test.ts`: mixed-phase fixture → assert per-phase totals sum to the session total (3 tests)
+- [X] Create `src/classifier/classify.test.ts`: fixtures for each phase (plan-heavy, edit-heavy, test-run, error-loop) → assert phase + tier (10 tests incl. estSave sign, empty-window default, never-Fable)
+- [X] Run `npm test` — classifier + aggregation tests pass (26/26 total green)
+- [X] **Demo**: do planning then editing in a live session — watch the tier badge flip `🔴 Opus` → `🟡 Sonnet`, the per-phase split grow, and the session total (`Σ €…`) tick up — verified via real fixture: `Fable €53.36 · Opus €23.45 · Σ €76.81 | plan €35.37 · impl €41.44 | Planning → 🟠 Opus recommended`. Live flip needs a session reload; scrubbed fixture can't show verify/debug (tool inputs + errors were redacted) — those need a real transcript.
 
 > 💾 **Checkpoint**: `feat(classifier): add phase detection and tier recommendation`
 
@@ -149,17 +149,21 @@ meter           + indicator     (stretch)        (on recordings)
 
 ## Phase 4 — Track C: "Autopilot" (SDK auto-switch — stretch)
 
-> **Context**: Genuine hands-off switching is impossible from plain hooks (they advise, they can't run `/model`). This phase builds a thin Agent SDK harness (`@anthropic-ai/claude-agent-sdk`) that selects the model per turn from the live `PhaseVerdict`. Highest risk, so it lands last — Phases 1–3 already stand as demos. Requires an API key.
+> **Context (reframed 2026-07-24 — no API key required)**: The original "needs an API key" caveat conflated the metered API with the CLI. The `claude` CLI is subscription-authed and exposes `-p/--print`, `--model`, `--resume`. That opens two key-free auto-switch paths:
+> - **Path 2 (primary, live session)**: a `Stop`/nudge hook that, on a high-confidence tier mismatch, injects the switch into the *running TUI* via `tmux send-keys -t "$TMUX_PANE" "/model <tier>" Enter` (macOS non-tmux fallback: `osascript`). Visible, fragile (needs tmux/accessibility), but flips your live chat with zero key. This is the "keep chatting, model auto-optimizes" experience.
+> - **Path 1 (alt, headless)**: `src/autopilot/harness.ts` drives `claude -p --model <tier> --resume <id>` in an autonomous task loop — genuine per-turn switching, subscription auth, but a *separate* run, not your live chat.
+>
+> **Safety rule**: auto-switch **downshifts only** (to a cheaper tier). Escalation up the ladder (→ Opus/Fable) stays a nudge, never automatic — no surprise spend. Gated behind an opt-in flag (`AGENTX_AUTOSWITCH=1`) so it never fires unexpectedly. Still a stretch — lands after Phases 2/3, which it reuses.
 
-- [!] Add dep `@anthropic-ai/claude-agent-sdk`; add `ANTHROPIC_API_KEY` to `.env.example`
-- [!] Create `src/autopilot/harness.ts`: run a task loop, and before each turn call `classifyPhase` to pick the model tier
-- [!] Feed the chosen model into the SDK request per turn; log each switch (`turn 12: implement → sonnet`)
-- [!] Reuse `costEngine` to accumulate spend across the autonomous run
-- [!] Create a scripted demo task (`src/autopilot/demo-task.ts`) that naturally spans plan → implement → verify
-- [!] Print an end-of-run summary: turns per tier, total cost, cost vs all-Opus baseline
-- [!] **Demo**: run the harness hands-off; watch the tier auto-switch and Opus used only for the planning/debug spikes
-
-> **⚠ Blocked (2026-07-24)**: Entire phase depends on `ANTHROPIC_API_KEY` (metered Anthropic API), which the enterprise/Team subscription does not provide. Unblocking requires org admin to provision API Console access with billing. Phases 1–3 + 5 remain fully demoable without it.
+- [ ] Path 2: extend the Phase 3 nudge into a switch trigger — on a downshift-worthy mismatch, resolve the current pane (`$TMUX_PANE`) and run `tmux send-keys "/model <tier>" Enter` (guarded by `AGENTX_AUTOSWITCH=1`)
+- [ ] Path 2 fallback: macOS `osascript` keystroke injection for non-tmux terminals (document the Accessibility permission requirement)
+- [ ] Share the Phase 3 debounce/cooldown so it switches once per phase transition, not every turn; enforce downshift-only
+- [ ] Path 1 (alt): `src/autopilot/harness.ts` headless runner using `claude -p --model <tier> --resume` (subscription auth, no key), picking the model per turn from `classifyPhase`
+- [ ] Reuse `costEngine` to log each switch (`turn 12: implement → sonnet`) and accumulate spend
+- [ ] Create a scripted demo task (`src/autopilot/demo-task.ts`) that naturally spans plan → implement → verify
+- [ ] Print an end-of-run summary: turns per tier, total cost, cost vs all-Opus baseline
+- [ ] **Demo**: Path 2 — mechanical edits on Opus auto-downshift to Sonnet in your live session; and/or Path 1 — hands-off run with tier auto-switching
+- [>] SDK-with-`ANTHROPIC_API_KEY` variant — deferred; not needed given the subscription-authed CLI paths above. Revisit only if an org API key is provisioned.
 
 > 💾 **Checkpoint**: `feat(autopilot): add SDK harness with per-turn model selection`
 

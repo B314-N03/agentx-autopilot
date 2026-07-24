@@ -42,10 +42,13 @@ describe('renderMeter', () => {
 });
 
 describe('buildStatusline', () => {
-  it('parses a payload transcript path into a meter', async () => {
+  it('parses a payload transcript path into meter | phase split | verdict', async () => {
     const meter = await buildStatusline({ transcript_path: fixture });
-    // cost-math fixture: Opus €0.09 (86% share → ⚠), Sonnet €0.01 (intro), total €0.10
-    expect(meter).toBe('Opus €0.09 · Sonnet €0.01 · Σ €0.10 ⚠');
+    // cost-math fixture has no tool signals → safe implement default (Sonnet).
+    // Opus 86% share → ⚠; both turns attribute to impl; total €0.10.
+    expect(meter).toBe(
+      'Opus €0.09 · Sonnet €0.01 · Σ €0.10 ⚠ | impl €0.10 | Implementing → 🟡 Sonnet recommended',
+    );
   });
 
   it('cold-starts on a missing transcript path without crashing', async () => {
