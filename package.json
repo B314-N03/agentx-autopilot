@@ -1,0 +1,19 @@
+{
+  "name": "agentx-autopilot",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Cost-aware model-split autopilot for Claude Code: detect work phase, know the right model tier, surface live cost, nudge, prove savings.",
+  "scripts": {
+    "dev": "tsx src/core/cli.ts",
+    "cost": "tsx src/core/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
