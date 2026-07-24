@@ -60,6 +60,35 @@ export function buildSwitchCommand(
   }
 }
 
+/** Escape a string for embedding inside an AppleScript double-quoted literal. */
+function osaEscape(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+/**
+ * Build one keystroke command per line, for injecting a SEQUENCE into the live
+ * TUI — e.g. `/model sonnet` followed by a re-submitted prompt. Each line is
+ * typed and submitted (Enter). Single-line entries are reliable; embedded
+ * newlines are a known rough edge (they submit early in the TUI).
+ */
+export function buildInjectCommands(kind: SwitcherKind, lines: string[], env: SwitchEnv): SwitchCommand[] {
+  const out: SwitchCommand[] = [];
+  for (const line of lines) {
+    if (kind === 'tmux') {
+      out.push({ cmd: 'tmux', args: ['send-keys', '-t', env.TMUX_PANE ?? '', line, 'Enter'] });
+    } else if (kind === 'iterm') {
+      out.push({
+        cmd: 'osascript',
+        args: [
+          '-e',
+          `tell application "iTerm2" to tell current window to tell current session to write text "${osaEscape(line)}"`,
+        ],
+      });
+    }
+  }
+  return out;
+}
+
 export interface SwitchResult {
   kind: SwitcherKind;
   command: SwitchCommand | null;

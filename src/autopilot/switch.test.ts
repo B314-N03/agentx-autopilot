@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveSwitcher, modelAlias, buildSwitchCommand, performSwitch } from './switch.js';
+import { resolveSwitcher, modelAlias, buildSwitchCommand, buildInjectCommands, performSwitch } from './switch.js';
 
 describe('resolveSwitcher', () => {
   it('prefers tmux when $TMUX is set', () => {
@@ -35,6 +35,26 @@ describe('buildSwitchCommand', () => {
   });
   it('returns null when there is no backend', () => {
     expect(buildSwitchCommand('none', 'haiku', {})).toBeNull();
+  });
+});
+
+describe('buildInjectCommands', () => {
+  it('emits one submit-per-line for tmux', () => {
+    const cmds = buildInjectCommands('tmux', ['/model haiku', 'fix the bug'], { TMUX_PANE: '%1' });
+    expect(cmds).toHaveLength(2);
+    expect(cmds[0]).toEqual({ cmd: 'tmux', args: ['send-keys', '-t', '%1', '/model haiku', 'Enter'] });
+    expect(cmds[1]!.args).toContain('fix the bug');
+  });
+
+  it('emits osascript write-text per line for iterm, escaping quotes', () => {
+    const cmds = buildInjectCommands('iterm', ['/model sonnet', 'say "hi"'], {});
+    expect(cmds).toHaveLength(2);
+    expect(cmds[0]!.args[1]).toContain('write text "/model sonnet"');
+    expect(cmds[1]!.args[1]).toContain('write text "say \\"hi\\""'); // quotes escaped for AppleScript
+  });
+
+  it('returns nothing when there is no backend', () => {
+    expect(buildInjectCommands('none', ['/model haiku'], {})).toEqual([]);
   });
 });
 
