@@ -45,6 +45,10 @@ describe('analyze', () => {
     expect(report.turns).toBe(7);
     expect(Object.keys(report.byModelEur).sort()).toEqual(['claude-opus-4-8', 'claude-sonnet-5']);
   });
+
+  it('reports the ideal allocation by model (mechanical → all Haiku)', () => {
+    expect(Object.keys(report.idealByModelEur)).toEqual(['claude-haiku-4-5']);
+  });
 });
 
 describe('projectMonthly', () => {

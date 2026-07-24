@@ -1,30 +1,37 @@
-import { costTurn } from '../core/costEngine.js';
+import { costTurn, readEntries, turnsFromEntries } from '../core/costEngine.js';
 import { getPricing, tierLadder, type PricingTable } from '../core/pricing.js';
 import { attributeVerdicts } from '../classifier/classify.js';
 import { extractSignals } from '../classifier/signals.js';
-import { readEntries, turnsFromEntries } from '../core/costEngine.js';
 import type { TurnCost } from '../core/types.js';
 
 /** The Opus tier id — the "before autopilot" baseline everyone defaults to. */
 const OPUS = 'claude-opus-4-8';
 
+/** Additive per-session totals — safe to sum across many sessions. */
+export interface RawTotals {
+  turns: number;
+  actualEur: number;
+  allOpusEur: number;
+  idealEur: number;
+  actualOpusEur: number;
+  idealOpusEur: number;
+  byModelEur: Record<string, number>;
+  idealByModelEur: Record<string, number>;
+}
+
 export interface SavingsReport {
   turns: number;
-  /** What the session actually cost, as run. */
   actualEur: number;
-  /** Baseline: every turn re-priced as if it ran on Opus. */
   allOpusEur: number;
-  /** Ideal: every turn re-priced at its classifier-recommended tier. */
   idealEur: number;
-  /** allOpus − ideal: what the autopilot saves vs the all-Opus baseline. */
   savedVsBaselineEur: number;
   savedPct: number;
-  /** Opus's share of ACTUAL spend, %. */
   opusSharePct: number;
-  /** Opus's share of the IDEAL (autopilot) spend, %. */
   idealOpusSharePct: number;
-  /** Per-model actual spend, for the breakdown chart. */
+  /** Actual spend per model (what really ran). */
   byModelEur: Record<string, number>;
+  /** Ideal spend per model (what the autopilot would have picked). */
+  idealByModelEur: Record<string, number>;
 }
 
 function usageOf(t: TurnCost) {
@@ -36,56 +43,97 @@ function usageOf(t: TurnCost) {
   };
 }
 
+function zeroTotals(): RawTotals {
+  return {
+    turns: 0, actualEur: 0, allOpusEur: 0, idealEur: 0,
+    actualOpusEur: 0, idealOpusEur: 0, byModelEur: {}, idealByModelEur: {},
+  };
+}
+
+function addTo(map: Record<string, number>, key: string, v: number): void {
+  map[key] = (map[key] ?? 0) + v;
+}
+
 /**
- * Compute the savings story for a session: actual vs all-Opus baseline vs the
- * ideal cost if every turn had run at its recommended tier.
+ * Accumulate additive totals for a session. Turns are always classified with
+ * full-session context; when `sinceMs` is given, only turns at/after that
+ * timestamp are counted (undated turns are excluded under a date filter).
  */
+export function accumulate(
+  turns: TurnCost[],
+  signals: ReturnType<typeof extractSignals>,
+  table: PricingTable = getPricing(),
+  sinceMs?: number,
+): RawTotals {
+  const verdicts = attributeVerdicts(signals, turns, table);
+  const r = zeroTotals();
+  turns.forEach((t, i) => {
+    if (sinceMs !== undefined) {
+      const ms = Date.parse(t.ts);
+      if (Number.isNaN(ms) || ms < sinceMs) return;
+    }
+    const dateTable = getPricing(t.ts.slice(0, 10) || undefined);
+    const u = usageOf(t);
+    r.turns += 1;
+    r.actualEur += t.costEur;
+    addTo(r.byModelEur, t.model, t.costEur);
+    r.allOpusEur += costTurn(u, OPUS, dateTable);
+
+    const rec = verdicts[i]!.recommendedModel;
+    const idealC = costTurn(u, rec, dateTable);
+    r.idealEur += idealC;
+    addTo(r.idealByModelEur, rec, idealC);
+
+    if (t.model.includes('opus')) r.actualOpusEur += t.costEur;
+    if (rec.includes('opus')) r.idealOpusEur += idealC;
+  });
+  return r;
+}
+
+/** Sum two totals (for aggregating across sessions). */
+export function mergeTotals(a: RawTotals, b: RawTotals): RawTotals {
+  const out = zeroTotals();
+  out.turns = a.turns + b.turns;
+  out.actualEur = a.actualEur + b.actualEur;
+  out.allOpusEur = a.allOpusEur + b.allOpusEur;
+  out.idealEur = a.idealEur + b.idealEur;
+  out.actualOpusEur = a.actualOpusEur + b.actualOpusEur;
+  out.idealOpusEur = a.idealOpusEur + b.idealOpusEur;
+  for (const src of [a, b]) {
+    for (const [m, v] of Object.entries(src.byModelEur)) addTo(out.byModelEur, m, v);
+    for (const [m, v] of Object.entries(src.idealByModelEur)) addTo(out.idealByModelEur, m, v);
+  }
+  return out;
+}
+
+/** Turn additive totals into a presentable report with derived ratios. */
+export function finalize(r: RawTotals): SavingsReport {
+  const savedVsBaselineEur = r.allOpusEur - r.idealEur;
+  return {
+    turns: r.turns,
+    actualEur: r.actualEur,
+    allOpusEur: r.allOpusEur,
+    idealEur: r.idealEur,
+    savedVsBaselineEur,
+    savedPct: r.allOpusEur > 0 ? (savedVsBaselineEur / r.allOpusEur) * 100 : 0,
+    opusSharePct: r.actualEur > 0 ? (r.actualOpusEur / r.actualEur) * 100 : 0,
+    idealOpusSharePct: r.idealEur > 0 ? (r.idealOpusEur / r.idealEur) * 100 : 0,
+    byModelEur: r.byModelEur,
+    idealByModelEur: r.idealByModelEur,
+  };
+}
+
+/** Analyze a single session's turns + signals. */
 export function analyze(
   turns: TurnCost[],
   signals: ReturnType<typeof extractSignals>,
   table: PricingTable = getPricing(),
 ): SavingsReport {
-  const verdicts = attributeVerdicts(signals, turns, table);
-
-  let actualEur = 0;
-  let allOpusEur = 0;
-  let idealEur = 0;
-  let actualOpusEur = 0;
-  let idealOpusEur = 0;
-  const byModelEur: Record<string, number> = {};
-
-  turns.forEach((t, i) => {
-    const dateTable = getPricing(t.ts.slice(0, 10) || undefined);
-    const u = usageOf(t);
-    actualEur += t.costEur;
-    byModelEur[t.model] = (byModelEur[t.model] ?? 0) + t.costEur;
-    allOpusEur += costTurn(u, OPUS, dateTable);
-
-    const rec = verdicts[i]!.recommendedModel;
-    const idealC = costTurn(u, rec, dateTable);
-    idealEur += idealC;
-
-    if (t.model.includes('opus')) actualOpusEur += t.costEur;
-    if (rec.includes('opus')) idealOpusEur += idealC;
-  });
-
-  const savedVsBaselineEur = allOpusEur - idealEur;
-  return {
-    turns: turns.length,
-    actualEur,
-    allOpusEur,
-    idealEur,
-    savedVsBaselineEur,
-    savedPct: allOpusEur > 0 ? (savedVsBaselineEur / allOpusEur) * 100 : 0,
-    opusSharePct: actualEur > 0 ? (actualOpusEur / actualEur) * 100 : 0,
-    idealOpusSharePct: idealEur > 0 ? (idealOpusEur / idealEur) * 100 : 0,
-    byModelEur,
-  };
+  return finalize(accumulate(turns, signals, table));
 }
 
 export interface MonthlyProjection {
   monthlyEur: number;
-  /** Human-readable statement of the scaling assumption. */
   assumption: string;
 }
 
@@ -104,11 +152,10 @@ export function projectMonthly(
   };
 }
 
-/** Convenience: analyze a transcript file end-to-end. */
+/** Convenience: analyze a single transcript file end-to-end. */
 export async function analyzeTranscript(path: string, table: PricingTable = getPricing()): Promise<SavingsReport> {
   const entries = await readEntries(path);
   return analyze(turnsFromEntries(entries), extractSignals(entries), table);
 }
 
-/** Re-exported for the dashboard's tier ordering. */
 export { tierLadder };
