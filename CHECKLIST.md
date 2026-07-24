@@ -93,16 +93,16 @@ meter           + indicator     (stretch)        (on recordings)
 
 > **Context**: Claude Code runs a `statusLine` command each turn and passes a JSON payload on stdin that includes the running session's transcript path. Read that path, run `costEngine`, and render a compact live meter. Verify the exact stdin field name for the transcript path against the payload (log it once) before hardcoding it.
 
-- [ ] Create `src/statusline/statusline.ts`: read stdin JSON, extract transcript path, call `parseTranscript` + `aggregateByModel`
-- [ ] Render a one-line meter string: `Opus €0.84 · Sonnet €0.09 · total €0.93`
-- [ ] Render an explicit, clearly-labeled **session total** segment (running sum across all turns, formatted `Σ €0.93`) as the meter's anchor
-- [ ] Add a `⚠` marker to the meter when Opus share exceeds a threshold (e.g. >60%)
-- [ ] Handle the cold-start case (empty/short transcript → `Σ €0.00`) without crashing
-- [ ] Add `bin/statusline.sh` wrapper that invokes `tsx src/statusline/statusline.ts`
-- [ ] Register the wrapper in `.claude/settings.json` under `statusLine` (in the hackathon repo, not a work repo)
-- [ ] Create `src/statusline/statusline.test.ts`: feed a mock stdin payload → assert meter string format
-- [ ] Run `npm test` — statusline tests pass
-- [ ] **Demo**: open a real Claude Code session in this repo, watch the meter tick and the per-model split grow live
+- [X] Create `src/statusline/statusline.ts`: read stdin JSON, extract transcript path, call `parseTranscript` + `aggregateByModel`
+- [X] Render a one-line meter string: `Opus €0.84 · Sonnet €0.09 · total €0.93`
+- [X] Render an explicit, clearly-labeled **session total** segment (running sum across all turns, formatted `Σ €0.93`) as the meter's anchor
+- [X] Add a `⚠` marker to the meter when Opus share exceeds a threshold (e.g. >60%)
+- [X] Handle the cold-start case (empty/short transcript → `Σ €0.00`) without crashing
+- [X] Add `bin/statusline.sh` wrapper that invokes `tsx src/statusline/statusline.ts`
+- [X] Register the wrapper in `.claude/settings.json` under `statusLine` (in the hackathon repo, not a work repo) — uses `$CLAUDE_PROJECT_DIR/bin/statusline.sh` so no absolute personal path is committed
+- [X] Create `src/statusline/statusline.test.ts`: feed a mock stdin payload → assert meter string format (7 tests: label derivation, ordering, ⚠ on/off, cold-start, payload→meter)
+- [X] Run `npm test` — statusline tests pass (13/13 total green)
+- [X] **Demo**: open a real Claude Code session in this repo, watch the meter tick and the per-model split grow live — verified end-to-end by piping a real statusLine-shaped payload through `statusline.ts` → `Fable €53.36 · Opus €23.45 · Σ €76.81`. Transcript-path field confirmed as `transcript_path`. To watch live, reload this session (settings.json just added); `STATUSLINE_DEBUG=1` logs payload keys to stderr if the field name differs.
 
 > 💾 **Checkpoint**: `feat(statusline): add live per-model cost meter`
 
