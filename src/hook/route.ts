@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, unlinkSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -89,15 +89,54 @@ function shq(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
+function routeLogPath(): string {
+  const dir = join(tmpdir(), 'agentx-autopilot');
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch {
+    /* best-effort */
+  }
+  return join(dir, 'route.log');
+}
+
+/** Append a timestamped line to the persistent route log (best-effort). */
+function logRoute(msg: string): void {
+  try {
+    appendFileSync(routeLogPath(), `${new Date().toISOString()} ${msg}\n`);
+  } catch {
+    /* best-effort */
+  }
+}
+
 /**
  * Fire the re-injection AFTER this hook exits and the block settles: a detached
- * shell sleeps briefly, types `/model <alias>` (submit), then the prompt (submit).
+ * shell waits, types `/model <alias>` (submit), waits again for the switch to
+ * actually land (blind timing — no confirmation signal exists), then re-types
+ * the prompt (submit). Delays are env-tunable since this is inherently racy;
+ * `&&`-chained so a failed step (e.g. the Automation permission not yet
+ * granted) stops the sequence instead of silently mistyping the prompt into
+ * the wrong state. Every step is timestamp-logged to route.log for diagnosis.
  */
 function scheduleReinject(kind: SwitcherKind, alias: string, prompt: string): boolean {
   const cmds = buildInjectCommands(kind, [`/model ${alias}`, prompt], process.env);
   if (!cmds.length) return false;
-  const parts = cmds.map((c) => [c.cmd, ...c.args].map(shq).join(' '));
-  const shell = 'sleep 0.4; ' + parts.join('; sleep 0.25; ');
+  const [switchCmd, promptCmd] = cmds.map((c) => [c.cmd, ...c.args].map(shq).join(' '));
+  const preDelay = Number(process.env.AGENTX_ROUTE_DELAY_MS ?? 500) / 1000;
+  const postDelay = Number(process.env.AGENTX_ROUTE_DELAY2_MS ?? 900) / 1000;
+  const logPath = shq(routeLogPath());
+  const log = (msg: string) => `echo "$(date '+%H:%M:%S') ${msg}" >> ${logPath}`;
+
+  const shell = [
+    log(`reroute → ${alias}: waiting ${preDelay}s before /model`),
+    `sleep ${preDelay}`,
+    switchCmd,
+    log(`typed /model ${alias}; waiting ${postDelay}s before re-typing prompt`),
+    `sleep ${postDelay}`,
+    promptCmd,
+    log('typed prompt — sequence done'),
+  ].join(' && ');
+
+  logRoute(`reroute → ${alias}: scheduled (pre=${preDelay}s post=${postDelay}s)`);
   spawn('bash', ['-c', shell], { detached: true, stdio: 'ignore' }).unref();
   return true;
 }
