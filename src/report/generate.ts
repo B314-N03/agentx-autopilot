@@ -133,8 +133,17 @@ function render(report: SavingsReport, subtitle: string, days?: number): string 
 </div></body></html>`;
 }
 
-/** All *.jsonl transcripts modified at/after the cutoff, across all projects. */
-function findRecentTranscripts(projectsRoot: string, cutoffMs: number): string[] {
+/** Claude Code encodes a session's cwd into its project-dir name (non-alnum → '-'). */
+function dirPrefixFor(root: string): string {
+  return root.replace(/\/$/, '').replace(/[^A-Za-z0-9]/g, '-');
+}
+
+/**
+ * All *.jsonl transcripts modified at/after the cutoff. When `dirPrefix` is
+ * given, only sessions whose project dir is at/under that encoded path are
+ * included (path-boundary match, so `…-work` excludes `…-workshop`).
+ */
+function findRecentTranscripts(projectsRoot: string, cutoffMs: number, dirPrefix?: string): string[] {
   const out: string[] = [];
   let dirs;
   try {
@@ -144,6 +153,7 @@ function findRecentTranscripts(projectsRoot: string, cutoffMs: number): string[]
   }
   for (const d of dirs) {
     if (!d.isDirectory()) continue;
+    if (dirPrefix && !(d.name === dirPrefix || d.name.startsWith(dirPrefix + '-'))) continue;
     const sub = join(projectsRoot, d.name);
     let files: string[];
     try {
@@ -176,7 +186,9 @@ async function main(): Promise<void> {
   } else {
     days = arg && /^\d+$/.test(arg) ? parseInt(arg, 10) : 30;
     const cutoff = Date.now() - days * DAY_MS;
-    const files = findRecentTranscripts(join(homedir(), '.claude', 'projects'), cutoff);
+    const reportRoot = process.env.AGENTX_REPORT_ROOT?.trim() || undefined;
+    const dirPrefix = reportRoot ? dirPrefixFor(reportRoot) : undefined;
+    const files = findRecentTranscripts(join(homedir(), '.claude', 'projects'), cutoff, dirPrefix);
     let totals = accumulate([], []); // zero seed
     let scanned = 0;
     for (const f of files) {
@@ -184,10 +196,14 @@ async function main(): Promise<void> {
       const turns = turnsFromEntries(entries);
       if (!turns.length) continue;
       totals = mergeTotals(totals, accumulate(turns, extractSignals(entries), getPricing(), cutoff));
-      if (totals.turns > 0) scanned += 1;
+      scanned += 1;
     }
     report = finalize(totals);
-    subtitle = `last ${days} days · ${scanned} sessions · ${report.turns} billable turns`;
+    const scope = reportRoot ? ` · under ${reportRoot}` : ' · all projects';
+    subtitle = `last ${days} days · ${scanned} sessions · ${report.turns} billable turns${scope}`;
+    if (!reportRoot) {
+      console.warn('  (tip: set AGENTX_REPORT_ROOT to scope to billable sessions, e.g. your work folder)');
+    }
   }
 
   const out = join(root, 'report.html');
