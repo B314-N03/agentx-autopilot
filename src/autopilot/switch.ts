@@ -65,12 +65,15 @@ export interface SwitchResult {
   command: SwitchCommand | null;
   attempted: boolean;
   dryRun: boolean;
+  /** True only when the backend actually ran and exited 0. */
+  ok: boolean;
 }
 
 /**
  * Perform the live model switch. Side-effecting (spawns the backend) unless
  * `dryRun`, which returns the command it would have run without executing it.
- * First real run may trigger a macOS Automation-permission prompt for iTerm.
+ * First real run may trigger a macOS Automation-permission prompt for iTerm;
+ * `ok` reflects whether the injection actually succeeded (exit 0).
  */
 export function performSwitch(
   model: string,
@@ -80,8 +83,8 @@ export function performSwitch(
   const kind = resolveSwitcher(env);
   const command = buildSwitchCommand(kind, modelAlias(model), env);
   const dryRun = !!opts.dryRun;
-  if (!command) return { kind, command: null, attempted: false, dryRun };
-  if (dryRun) return { kind, command, attempted: false, dryRun };
-  spawnSync(command.cmd, command.args, { stdio: 'ignore' });
-  return { kind, command, attempted: true, dryRun };
+  if (!command) return { kind, command: null, attempted: false, dryRun, ok: false };
+  if (dryRun) return { kind, command, attempted: false, dryRun, ok: false };
+  const res = spawnSync(command.cmd, command.args, { stdio: 'ignore' });
+  return { kind, command, attempted: true, dryRun, ok: res.status === 0 && !res.error };
 }

@@ -225,11 +225,19 @@ async function main(): Promise<void> {
       `[autoswitch] kind=${res.kind}${res.dryRun ? ' DRYRUN' : ''} ` +
         `${res.command ? `${res.command.cmd} ${res.command.args.join(' ')}` : '(no backend)'}\n`,
     );
-    if (res.command) {
+    if (res.command && (res.dryRun || res.ok)) {
       const verb = res.dryRun ? 'would auto-switch' : 'auto-switched';
       emitNudge(
         `⚡ ${verb} → /model ${modelAlias(decision.recommendedModel)} · ${decision.streak} ` +
           `${PHASE_NOUN[decision.phase]} turns on ${shortModelName(decision.currentModel)}, ~€${decision.estSavePhaseEur.toFixed(2)} saved.`,
+      );
+      return;
+    }
+    if (res.command && !res.ok) {
+      // Backend ran but failed — almost always the iTerm Automation permission
+      // hasn't been granted yet. Show the manual nudge plus a one-time hint.
+      emitNudge(
+        `${decision.text} (auto-switch blocked — approve iTerm under System Settings → Privacy → Automation)`,
       );
       return;
     }
