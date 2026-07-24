@@ -7,6 +7,7 @@ import { getPricing, tierLadder, type PricingTable } from '../core/pricing.js';
 import { shortModelName } from '../core/modelLabel.js';
 import { extractSignals, type TurnSignals } from '../classifier/signals.js';
 import { classifyPhase } from '../classifier/classify.js';
+import { performSwitch, modelAlias } from '../autopilot/switch.js';
 import type { Phase, TurnCost } from '../core/types.js';
 
 const VERDICT_WINDOW = 20;
@@ -213,8 +214,28 @@ async function main(): Promise<void> {
   const { emit, nextState } = applyDebounce(decision, readState(sPath));
   writeState(sPath, nextState);
 
-  if (emit) emitNudge(decision.text);
-  // else: no-op (exit 0, no output) — a silent hook is a non-naggy hook
+  if (!emit) return; // no-op (exit 0, no output) — a silent hook is a non-naggy hook
+
+  // Phase 4 Path 2: opt-in live auto-switch. Off by default (nudge only).
+  // Downshift is guaranteed by decideNudge, so this never escalates spend.
+  if (process.env.AGENTX_AUTOSWITCH === '1') {
+    const dryRun = process.env.AGENTX_AUTOSWITCH_DRYRUN === '1';
+    const res = performSwitch(decision.recommendedModel, process.env, { dryRun });
+    process.stderr.write(
+      `[autoswitch] kind=${res.kind}${res.dryRun ? ' DRYRUN' : ''} ` +
+        `${res.command ? `${res.command.cmd} ${res.command.args.join(' ')}` : '(no backend)'}\n`,
+    );
+    if (res.command) {
+      const verb = res.dryRun ? 'would auto-switch' : 'auto-switched';
+      emitNudge(
+        `⚡ ${verb} → /model ${modelAlias(decision.recommendedModel)} · ${decision.streak} ` +
+          `${PHASE_NOUN[decision.phase]} turns on ${shortModelName(decision.currentModel)}, ~€${decision.estSavePhaseEur.toFixed(2)} saved.`,
+      );
+      return;
+    }
+    // no injection backend → fall through to the plain visible nudge
+  }
+  emitNudge(decision.text);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

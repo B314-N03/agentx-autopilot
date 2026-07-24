@@ -155,14 +155,14 @@ meter           + indicator     (stretch)        (on recordings)
 >
 > **Safety rule**: auto-switch **downshifts only** (to a cheaper tier). Escalation up the ladder (→ Opus/Fable) stays a nudge, never automatic — no surprise spend. Gated behind an opt-in flag (`AGENTX_AUTOSWITCH=1`) so it never fires unexpectedly. Still a stretch — lands after Phases 2/3, which it reuses.
 
-- [ ] Path 2: extend the Phase 3 nudge into a switch trigger — on a downshift-worthy mismatch, resolve the current pane (`$TMUX_PANE`) and run `tmux send-keys "/model <tier>" Enter` (guarded by `AGENTX_AUTOSWITCH=1`)
-- [ ] Path 2 fallback: macOS `osascript` keystroke injection for non-tmux terminals (document the Accessibility permission requirement)
-- [ ] Share the Phase 3 debounce/cooldown so it switches once per phase transition, not every turn; enforce downshift-only
-- [ ] Path 1 (alt): `src/autopilot/harness.ts` headless runner using `claude -p --model <tier> --resume` (subscription auth, no key), picking the model per turn from `classifyPhase`
-- [ ] Reuse `costEngine` to log each switch (`turn 12: implement → sonnet`) and accumulate spend
-- [ ] Create a scripted demo task (`src/autopilot/demo-task.ts`) that naturally spans plan → implement → verify
-- [ ] Print an end-of-run summary: turns per tier, total cost, cost vs all-Opus baseline
-- [ ] **Demo**: Path 2 — mechanical edits on Opus auto-downshift to Sonnet in your live session; and/or Path 1 — hands-off run with tier auto-switching
+- [X] Path 2: extend the Phase 3 nudge into a switch trigger — `src/autopilot/switch.ts` (`resolveSwitcher`/`buildSwitchCommand`/`performSwitch`), wired into the Stop hook, guarded by `AGENTX_AUTOSWITCH=1`. tmux path uses `send-keys -t "$TMUX_PANE" "/model <tier>" Enter`
+- [X] Path 2 fallback: macOS `osascript` keystroke injection for non-tmux terminals — this env has **no tmux, iTerm on macOS**, so the live path is `osascript … tell iTerm2 … write text "/model <tier>"`. ⚠ First real run triggers a **macOS Automation permission** prompt (System Settings → Privacy → Automation → allow Terminal/iTerm to control iTerm)
+- [X] Share the Phase 3 debounce/cooldown so it switches once per phase transition, not every turn; enforce downshift-only — reuses `decideNudge` (downshift-only) + `applyDebounce`; auto-switch only acts when a nudge is already due
+- [>] Path 1 (alt): `src/autopilot/harness.ts` headless runner using `claude -p --model <tier> --resume` (subscription auth, no key) — **deferred**: you chose Path 2 (live-session) as the autopilot. CLI flags confirmed present; revisit for fully-autonomous runs
+- [>] Reuse `costEngine` to log each switch and accumulate spend — Path 2 logs each switch to stderr (`[autoswitch] …`) and puts the est. saving in the `systemMessage`; full cross-run accumulation is a Path 1 concern (deferred)
+- [>] Create a scripted demo task (`src/autopilot/demo-task.ts`) that naturally spans plan → implement → verify — Path 1 only (deferred)
+- [>] Print an end-of-run summary: turns per tier, total cost, cost vs all-Opus baseline — Path 1 only (deferred; Phase 5 report covers the savings story on recordings)
+- [X] **Demo**: Path 2 — mechanical edits on Opus auto-downshift in your live session — verified end-to-end via **dry-run** against `fixtures/nudge-demo.jsonl`: builds `osascript … write text "/model haiku"` and emits `⚡ would auto-switch → /model haiku · … ~€0.18 saved.` To arm live: set `AGENTX_AUTOSWITCH=1` (drop `AGENTX_AUTOSWITCH_DRYRUN`), reload the session, approve the iTerm Automation prompt.
 - [>] SDK-with-`ANTHROPIC_API_KEY` variant — deferred; not needed given the subscription-authed CLI paths above. Revisit only if an org API key is provisioned.
 
 > 💾 **Checkpoint**: `feat(autopilot): add SDK harness with per-turn model selection`
